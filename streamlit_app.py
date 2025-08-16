@@ -1,6 +1,5 @@
 # streamlit_app.py
 import io
-import random
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple, Optional
 
@@ -9,37 +8,30 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-
-# ---------------------- Sideoppsett ----------------------
+# ---------- Sideoppsett ----------
 st.set_page_config(
     page_title="Aksjesimulering (web)",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# Litt “app look”
 st.markdown(
     """
     <style>
     .block-container {padding-top: 1.2rem; padding-bottom: 2rem;}
     .stButton > button {height: 3rem; font-weight: 600;}
-    .metric-green {color: #107C10;}
-    .metric-red {color: #CF1322;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-
-# ---------------------- Datatyper ----------------------
+# ---------- Datatyper ----------
 @dataclass
 class Stock:
     name: str
     min_change: float
     max_change: float
     value: float
-
 
 @dataclass
 class Event:
@@ -48,26 +40,22 @@ class Event:
     impact: float       # +/- prosent
     affected_stocks: List[str]
 
-
-# ---------------------- Standarddata ----------------------
+# ---------- Standarddata ----------
 DEFAULT_STOCKS = [
     Stock("Fisk", -5.0, 5.0, 100.0),
     Stock("Gull", -2.0, 2.0, 100.0),
-    Stock("IT", -10.0, 10.0, 100.0),
+    Stock("IT",   -10.0, 10.0, 100.0),
     Stock("Olje", -7.0, 7.0, 100.0),
 ]
-
 DEFAULT_EVENTS = [
     Event("Storm", 10.0, -5.0, ["Fisk", "Olje"]),
     Event("Teknologisk fremskritt", 5.0, 10.0, ["IT"]),
 ]
 
-
-# ---------------------- Hjelp ----------------------
+# ---------- Hjelp ----------
 def ensure_unique_names(items: List[str]) -> bool:
-    names = [str(n).strip() for n in items if str(n).strip() != ""]
+    names = [str(n).strip() for n in items if str(n).strip()]
     return len(names) == len(set(names)) and len(names) > 0
-
 
 def fig_to_png_bytes(fig) -> bytes:
     buf = io.BytesIO()
@@ -75,8 +63,7 @@ def fig_to_png_bytes(fig) -> bytes:
     buf.seek(0)
     return buf.read()
 
-
-# ---------------------- Init session_state ----------------------
+# ---------- Init session_state ----------
 if "stocks" not in st.session_state:
     st.session_state.stocks: List[Stock] = [Stock(**asdict(s)) for s in DEFAULT_STOCKS]
 if "events" not in st.session_state:
@@ -98,14 +85,11 @@ if "previous_values" not in st.session_state:
 if "histories" not in st.session_state:
     st.session_state.histories: Dict[str, List[float]] = {}
 if "weekly_summaries" not in st.session_state:
-    st.session_state.weekly_summaries: List[
-        Tuple[int, List[Tuple[str, float, float, float]]]
-    ] = []
+    st.session_state.weekly_summaries: List[Tuple[int, List[Tuple[str, float, float, float]]]] = []
 if "last_fig_png" not in st.session_state:
     st.session_state.last_fig_png: bytes = b""
 if "event_log" not in st.session_state:
     st.session_state.event_log: List[str] = []
-
 
 def reset_simulation():
     st.session_state.current_week = 0
@@ -116,10 +100,8 @@ def reset_simulation():
     st.session_state.last_fig_png = b""
     st.session_state.event_log = []
 
-
-# ---------------------- Simuleringskjerne (FLYTTET OPP) ----------------------
+# ---------- Simuleringskjerne (defineres FØR UI-knapper kaller den) ----------
 def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
-    """Simulerer én uke (5 dager / 30 steg) og oppdaterer session_state."""
     if not st.session_state.stocks:
         return False, "Ingen aksjer definert."
     if not ensure_unique_names([s.name for s in st.session_state.stocks]):
@@ -127,7 +109,6 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
     if st.session_state.events and not ensure_unique_names([e.name for e in st.session_state.events]):
         return False, "Hendelsesnavn må være unike."
 
-    # Første uke: init
     if st.session_state.current_week == 0:
         st.session_state.initial_values = {s.name: float(s.value) for s in st.session_state.stocks}
         st.session_state.previous_values = {s.name: float(s.value) for s in st.session_state.stocks}
@@ -139,7 +120,6 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
     total_steps = 30
     days = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"]
 
-    # Lokale kopier
     stocks_local = [Stock(**asdict(s)) for s in st.session_state.stocks]
     histories = {k: list(v) for k, v in st.session_state.histories.items()}
     prev_vals = dict(st.session_state.previous_values)
@@ -176,7 +156,6 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
             s.value = max(s.value * (1 + adjusted_change / 100.0), 5.0)
             histories[s.name].append(float(s.value))
 
-        # Tikk ned
         new_active = []
         for (ev, left) in active_events:
             left -= 1
@@ -184,7 +163,6 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
                 new_active.append((ev, left))
         active_events = new_active
 
-    # Figur
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.set_title(f"Aksjeutvikling – uke {st.session_state.current_week+1}")
     ax.set_xlabel("Tid")
@@ -198,7 +176,6 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
     fig_png = fig_to_png_bytes(fig)
     plt.close(fig)
 
-    # Oppsummering
     rows = []
     for s in stocks_local:
         name = s.name
@@ -209,7 +186,6 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
         total_change = ((new_price - start_price) / start_price) * 100.0 if start_price else 0.0
         rows.append((name, round(week_change, 2), round(total_change, 2), round(new_price, 2)))
 
-    # Commit
     st.session_state.current_week += 1
     st.session_state.histories = histories
     st.session_state.previous_values = {s.name: float(s.value) for s in stocks_local}
@@ -223,24 +199,12 @@ def simulate_one_week(rng: np.random.RandomState) -> Tuple[bool, str]:
 
     return True, "OK"
 
-
-# ---------------------- Sidebar (Innstillinger) ----------------------
+# ---------- Sidebar ----------
 with st.sidebar:
     st.header("⚙️ Spillinnstillinger")
-
-    st.session_state.total_weeks = st.number_input(
-        "Antall uker",
-        min_value=1, max_value=52, value=st.session_state.total_weeks, step=1,
-    )
-
-    st.session_state.max_events_per_week = st.number_input(
-        "Maks hendelser per uke",
-        min_value=0, max_value=10, value=st.session_state.max_events_per_week, step=1,
-    )
-
-    st.session_state.seed = st.text_input(
-        "Tilfeldig frø (tomt = mer tilfeldig)", value=str(st.session_state.seed or "")
-    ) or None
+    st.session_state.total_weeks = st.number_input("Antall uker", 1, 52, st.session_state.total_weeks, 1)
+    st.session_state.max_events_per_week = st.number_input("Maks hendelser per uke", 0, 10, st.session_state.max_events_per_week, 1)
+    st.session_state.seed = st.text_input("Tilfeldig frø (tomt = mer tilfeldig)", value=str(st.session_state.seed or "")) or None
 
     c1, c2 = st.columns(2)
     with c1:
@@ -257,13 +221,11 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Data lagres i nettleserøkten (Session State).")
 
-
-# ---------------------- Redigeringsfaner ----------------------
+# ---------- UI ----------
 st.title("📈 Aksjesimulering (web)")
-
 tab_dash, tab_edit, tab_results = st.tabs(["Dashboard", "Aksjer & Hendelser", "Resultater"])
 
-# ---------------------- Tab: Dashboard ----------------------
+# Dashboard
 with tab_dash:
     st.subheader("Status")
     c1, c2, c3, c4 = st.columns(4)
@@ -275,20 +237,13 @@ with tab_dash:
     st.markdown("### Siste uke: graf og sammendrag")
     if st.session_state.weekly_summaries:
         wk, rows = st.session_state.weekly_summaries[-1]
-
         if st.session_state.last_fig_png:
             st.image(st.session_state.last_fig_png, caption=f"Aksjeutvikling – uke {wk}", use_container_width=True)
-
         df = pd.DataFrame(rows, columns=["Aksje", "Uke-endring (%)", "Total endring (%)", "Ny pris (kr)"])
         st.dataframe(df, use_container_width=True, hide_index=True)
-
         csv_bytes = df.to_csv(index=False, sep=";").encode("utf-8")
-        st.download_button(
-            "⬇️ Last ned ukesammendrag (CSV)",
-            data=csv_bytes,
-            file_name=f"ukesammendrag_uke{wk}.csv",
-            mime="text/csv",
-        )
+        st.download_button("⬇️ Last ned ukesammendrag (CSV)", data=csv_bytes,
+                           file_name=f"ukesammendrag_uke{wk}.csv", mime="text/csv")
     else:
         st.info("Ingen ukesammendrag ennå. Kjør simulering under.")
 
@@ -298,10 +253,7 @@ with tab_dash:
         if st.button("▶️ Neste uke"):
             rng = np.random.RandomState(seed=int(st.session_state.seed)) if st.session_state.seed else np.random.RandomState()
             ok, msg = simulate_one_week(rng)
-            if ok:
-                st.toast(f"Uke {st.session_state.current_week} fullført.", icon="✅")
-            else:
-                st.toast(msg, icon="⚠️")
+            st.toast(f"Uke {st.session_state.current_week} fullført." if ok else msg, icon="✅" if ok else "⚠️")
     with cB:
         if st.button("⏩ Kjør alle uker"):
             rng = np.random.RandomState(seed=int(st.session_state.seed)) if st.session_state.seed else np.random.RandomState()
@@ -312,15 +264,12 @@ with tab_dash:
                     break
             if st.session_state.current_week >= st.session_state.total_weeks:
                 st.toast("Simuleringen er ferdig!", icon="🎉")
-
     with cC:
         if st.session_state.last_fig_png:
-            st.download_button(
-                "🖼️ Last ned siste graf (PNG)",
-                data=st.session_state.last_fig_png,
-                file_name="aksjeutvikling.png",
-                mime="image/png",
-            )
+            st.download_button("🖼️ Last ned siste graf (PNG)",
+                               data=st.session_state.last_fig_png,
+                               file_name="aksjeutvikling.png",
+                               mime="image/png")
 
     st.markdown("### Hendelseslogg (siste)")
     if st.session_state.event_log:
@@ -329,8 +278,7 @@ with tab_dash:
     else:
         st.caption("Ingen hendelser ennå.")
 
-
-# ---------------------- Tab: Aksjer & Hendelser ----------------------
+# Aksjer & Hendelser
 with tab_edit:
     left, right = st.columns(2)
 
@@ -345,31 +293,23 @@ with tab_edit:
             "value": st.column_config.NumberColumn("Startverdi", min_value=0.0, max_value=1_000_000.0, step=1.0, format="%.2f"),
         }
         edited_stocks = st.data_editor(
-            stock_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config=stock_cfg,
-            hide_index=True,
-            key="stock_editor",
+            stock_df, num_rows="dynamic", use_container_width=True,
+            column_config=stock_cfg, hide_index=True, key="stock_editor",
         )
-
         if st.button("💾 Lagre aksjer"):
-            names_ok = ensure_unique_names(edited_stocks["name"].tolist())
-            if not names_ok:
+            if not ensure_unique_names(edited_stocks["name"].tolist()):
                 st.error("Aksjenavn må være unike og ikke tomme.")
             else:
                 try:
-                    new_stocks = []
-                    for _, row in edited_stocks.iterrows():
-                        new_stocks.append(
-                            Stock(
-                                name=str(row["name"]).strip(),
-                                min_change=float(row["min_change"]),
-                                max_change=float(row["max_change"]),
-                                value=float(row["value"]),
-                            )
+                    st.session_state.stocks = [
+                        Stock(
+                            name=str(row["name"]).strip(),
+                            min_change=float(row["min_change"]),
+                            max_change=float(row["max_change"]),
+                            value=float(row["value"]),
                         )
-                    st.session_state.stocks = new_stocks
+                        for _, row in edited_stocks.iterrows()
+                    ]
                     st.success("Aksjer lagret.")
                 except Exception as e:
                     st.error(f"Kunne ikke lagre aksjer: {e}")
@@ -386,12 +326,8 @@ with tab_edit:
             "impact": st.column_config.NumberColumn("Påvirkning (%)", min_value=-100.0, max_value=100.0, step=0.5, format="%.2f"),
         }
         edited_ev = st.data_editor(
-            ev_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config=ev_cfg,
-            hide_index=True,
-            key="event_editor_rows",
+            ev_df, num_rows="dynamic", use_container_width=True,
+            column_config=ev_cfg, hide_index=True, key="event_editor_rows",
         )
 
         affected_controls: List[List[str]] = []
@@ -401,7 +337,6 @@ with tab_edit:
                 st.caption(f"Påvirker (rad {i+1})")
             with cols[1]:
                 preselect = []
-                # prøv å forhåndsvelge basert på eksisterende rekkefølge
                 if i < len(st.session_state.events) and edited_ev.iloc[i]["name"] == st.session_state.events[i].name:
                     preselect = st.session_state.events[i].affected_stocks
                 affected = st.multiselect(
@@ -413,28 +348,24 @@ with tab_edit:
                 affected_controls.append(affected)
 
         if st.button("💾 Lagre hendelser"):
-            names_ok = ensure_unique_names(edited_ev["name"].tolist())
-            if not names_ok:
+            if not ensure_unique_names(edited_ev["name"].tolist()):
                 st.error("Hendelsesnavn må være unike og ikke tomme.")
             else:
                 try:
-                    new_events = []
-                    for i, row in edited_ev.iterrows():
-                        new_events.append(
-                            Event(
-                                name=str(row["name"]).strip(),
-                                probability=float(row["probability"]),
-                                impact=float(row["impact"]),
-                                affected_stocks=[str(x) for x in affected_controls[i]],
-                            )
+                    st.session_state.events = [
+                        Event(
+                            name=str(row["name"]).strip(),
+                            probability=float(row["probability"]),
+                            impact=float(row["impact"]),
+                            affected_stocks=[str(x) for x in affected_controls[i]],
                         )
-                    st.session_state.events = new_events
+                        for i, row in edited_ev.iterrows()
+                    ]
                     st.success("Hendelser lagret.")
                 except Exception as e:
                     st.error(f"Kunne ikke lagre hendelser: {e}")
 
-
-# ---------------------- Tab: Resultater (historikk) ----------------------
+# Resultater
 with tab_results:
     st.subheader("Historikk")
     if not st.session_state.weekly_summaries:
@@ -444,18 +375,15 @@ with tab_results:
         for wk, rows in st.session_state.weekly_summaries:
             for (name, wk_chg, total_chg, price) in rows:
                 all_rows.append(
-                    {"Uke": wk, "Aksje": name, "Uke-endring (%)": wk_chg, "Total endring (%)": total_chg, "Ny pris (kr)": price}
+                    {"Uke": wk, "Aksje": name, "Uke-endring (%)": wk_chg,
+                     "Total endring (%)": total_chg, "Ny pris (kr)": price}
                 )
         big_df = pd.DataFrame(all_rows)
         st.dataframe(big_df, use_container_width=True, hide_index=True)
 
         csv_bytes = big_df.to_csv(index=False, sep=";").encode("utf-8")
-        st.download_button(
-            "⬇️ Last ned alle resultater (CSV)",
-            data=csv_bytes,
-            file_name="aksjesimulering_resultater.csv",
-            mime="text/csv",
-        )
+        st.download_button("⬇️ Last ned alle resultater (CSV)",
+                           data=csv_bytes, file_name="aksjesimulering_resultater.csv", mime="text/csv")
 
         st.markdown("### Graf – siste uke")
         if st.session_state.last_fig_png:
